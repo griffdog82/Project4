@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
 tsp_optimizer.py: Offline Route Optimizer
+Provides two modes:
+ 1) Nearest-neighbor heuristic on an arbitrary city list (interactive).
+ 2) Nearest-neighbor heuristic on a fixed list of 20 major U.S. cities.
 """
 import os
 import time
 import json
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple
 
 import pandas as pd
 from geopy.geocoders import Nominatim
@@ -15,7 +18,31 @@ from math import radians, sin, cos, sqrt, atan2
 CACHE_FILE = "geocode_cache.json"
 GEOCODE_DELAY = 1.0  # seconds between geocode requests
 
-# ----- Geocoding Cache -----
+# ----- Fixed list of 20 major U.S. cities -----
+FIXED_CITIES: Dict[str, Tuple[float, float]] = {
+    "New York, NY": (40.7128, -74.0060),
+    "Los Angeles, CA": (34.0522, -118.2437),
+    "Chicago, IL": (41.8781, -87.6298),
+    "Houston, TX": (29.7604, -95.3698),
+    "Phoenix, AZ": (33.4484, -112.0740),
+    "Philadelphia, PA": (39.9526, -75.1652),
+    "San Antonio, TX": (29.4241, -98.4936),
+    "San Diego, CA": (32.7157, -117.1611),
+    "Dallas, TX": (32.7767, -96.7970),
+    "San Jose, CA": (37.3382, -121.8863),
+    "Austin, TX": (30.2672, -97.7431),
+    "Jacksonville, FL": (30.3322, -81.6557),
+    "Fort Worth, TX": (32.7555, -97.3308),
+    "Columbus, OH": (39.9612, -82.9988),
+    "Charlotte, NC": (35.2271, -80.8431),
+    "Indianapolis, IN": (39.7684, -86.1581),
+    "San Francisco, CA": (37.7749, -122.4194),
+    "Seattle, WA": (47.6062, -122.3321),
+    "Denver, CO": (39.7392, -104.9903),
+    "Washington, DC": (38.9072, -77.0369),
+}
+
+# ----- Geocoding cache -----
 def load_cache() -> Dict[str, Tuple[float, float]]:
     if os.path.exists(CACHE_FILE):
         with open(CACHE_FILE, "r") as f:
@@ -28,11 +55,13 @@ def save_cache(cache: Dict[str, Tuple[float, float]]) -> None:
         json.dump(cache, f)
 
 
-def geocode_city(name: str, geolocator, cache: Dict[str, Tuple[float, float]]) -> Tuple[float, float]:
+def geocode_city(name: str,
+                 geolocator: Nominatim,
+                 cache: Dict[str, Tuple[float, float]]) -> Tuple[float, float]:
     if name in cache:
         return cache[name]
     location = geolocator.geocode(name)
-    if location is None:
+    if not location:
         raise ValueError(f"Could not geocode '{name}'")
     coords = (location.latitude, location.longitude)
     cache[name] = coords
@@ -40,19 +69,20 @@ def geocode_city(name: str, geolocator, cache: Dict[str, Tuple[float, float]]) -
     time.sleep(GEOCODE_DELAY)
     return coords
 
-# ----- Distance Calculation -----
-def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+# ----- Distance calculation (Haversine) -----
+def haversine(lat1: float, lon1: float,
+              lat2: float, lon2: float) -> float:
     """
-    Great-circle distance between two points (miles).
+    Calculate great-circle distance between two points on Earth in miles.
     """
-    R = 3958.8  # Earth radius in miles
+    R = 3958.8  # Earth's radius in miles
     dlat = radians(lat2 - lat1)
     dlon = radians(lon2 - lon1)
-    a = sin(dlat/2)**2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)**2
+    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c
 
-# ----- User Interaction -----
+# ----- Interactive arbitrary list mode -----
 def get_city_list() -> List[Dict[str, object]]:
     geolocator = Nominatim(user_agent="offline_tsp")
     cache = load_cache()
@@ -62,9 +92,9 @@ def get_city_list() -> List[Dict[str, object]]:
         choice = input("1. New List\n2. Load Saved List\nChoose: ").strip()
     else:
         choice = "1"
-    if choice == "2":
+    if choice == '2':
         df = pd.read_csv("city_list.csv")
-        cities = df.to_dict("records")
+        cities = df.to_dict('records')
         print("Loaded saved city list.")
 
     while True:
@@ -73,16 +103,16 @@ def get_city_list() -> List[Dict[str, object]]:
             print(f"{idx+1}. {city['name']}")
         action = input("1. Add City\n2. Remove City\n3. Continue\nChoose: ").strip()
 
-        if action == "1":
+        if action == '1':
             name = input("Enter city (City, State): ").strip()
             try:
                 lat, lon = geocode_city(name, geolocator, cache)
-                cities.append({"name": name, "lat": lat, "lon": lon})
+                cities.append({'name': name, 'lat': lat, 'lon': lon})
                 print(f"Added {name} → ({lat:.6f}, {lon:.6f})")
             except ValueError as e:
                 print(e)
 
-        elif action == "2":
+        elif action == '2':
             idx = input("Enter city number to remove: ").strip()
             if idx.isdigit():
                 i = int(idx) - 1
@@ -94,9 +124,9 @@ def get_city_list() -> List[Dict[str, object]]:
             else:
                 print("Please enter a number.")
 
-        elif action == "3":
+        elif action == '3':
             save = input("Save this list to city_list.csv? (y/n): ").strip().lower()
-            if save == "y":
+            if save == 'y':
                 pd.DataFrame(cities).to_csv("city_list.csv", index=False)
                 print("City list saved.")
             break
@@ -106,100 +136,72 @@ def get_city_list() -> List[Dict[str, object]]:
 
     return cities
 
-# ----- TSP Solver -----
-def solve_tsp(
-    cities: List[Dict[str, object]],
-    start_idx: int = 0,
-    return_to_start: bool = True,
-) -> Tuple[List[int], float]:
-    n = len(cities)
-    if not (0 <= start_idx < n):
-        raise IndexError("start_idx out of range")
+# ----- Fixed list mode uses all 20 cities -----
+def get_preselected_list() -> List[Dict[str, object]]:
+    # Automatically return all fixed cities without prompting
+    return [
+        {'name': name, 'lat': coords[0], 'lon': coords[1]}
+        for name, coords in FIXED_CITIES.items()
+    ]
 
+# ----- Heuristic TSP solver -----
+def solve_tsp(cities: List[Dict[str, object]], start_idx: int = 0) -> Tuple[List[int], float]:
+    n = len(cities)
     visited = [False] * n
     route = [start_idx]
     visited[start_idx] = True
-    total_distance = 0.0
-
+    total = 0.0
     while len(route) < n:
         last = route[-1]
-        nearest = None
-        min_dist = float('inf')
-
+        nearest, mind = None, float('inf')
         for i in range(n):
             if not visited[i]:
-                dist = haversine(
-                    cities[last]['lat'], cities[last]['lon'],
-                    cities[i]['lat'], cities[i]['lon'],
-                )
-                if dist < min_dist:
-                    min_dist = dist
-                    nearest = i
-
+                d = haversine(cities[last]['lat'], cities[last]['lon'],
+                              cities[i]['lat'], cities[i]['lon'])
+                if d < mind:
+                    mind, nearest = d, i
         if nearest is None:
-            raise ValueError("No reachable unvisited cities remain")
-
+            break
         visited[nearest] = True
         route.append(nearest)
-        total_distance += min_dist
+        total += mind
+    # return to start
+    total += haversine(cities[route[-1]]['lat'], cities[route[-1]]['lon'],
+                       cities[route[0]]['lat'], cities[route[0]]['lon'])
+    route.append(route[0])
+    return route, total
 
-    if return_to_start:
-        back = haversine(
-            cities[route[-1]]['lat'], cities[route[-1]]['lon'],
-            cities[start_idx]['lat'], cities[start_idx]['lon'],
-        )
-        route.append(start_idx)
-        total_distance += back
-
-    return route, total_distance
-
-# ----- Output -----
+# ----- Print route -----
 def print_route(cities: List[Dict[str, object]], route: List[int]) -> None:
-    print("\nOptimal Route (Nearest Neighbor Approximation):")
-    print(f"{'City A':25} | {'City B':25} | {'Distance (mi)':>14}")
-    print("-" * 70)
-    for i in range(len(route) - 1):
-        a = cities[route[i]]
-        b = cities[route[i+1]]
-        dist = haversine(a['lat'], a['lon'], b['lat'], b['lon'])
-        print(f"{a['name'][:25]:25} | {b['name'][:25]:25} | {dist:14.1f}")
+    print("\nRoute (Heuristic):")
+    print(f"{'City A':25} | {'City B':25} | Distance (mi)")
+    print('-'*65)
+    for i in range(len(route)-1):
+        a, b = cities[route[i]], cities[route[i+1]]
+        d = haversine(a['lat'], a['lon'], b['lat'], b['lon'])
+        print(f"{a['name'][:25]:25} | {b['name'][:25]:25} | {d:10.1f}")
 
-# ----- Main Guard -----
+# ----- Main -----
 def main():
     print("Welcome to the Offline Route Optimizer!")
-    cities = get_city_list()
-    if len(cities) < 2:
-        print("You need at least 2 cities.")
+    print("1. Heuristic mode (interactive)")
+    print("2. Fixed list mode (20 cities)")
+    mode = input("Choose mode: ").strip()
+    if mode == '1':
+        cities = get_city_list()
+    elif mode == '2':
+        cities = get_preselected_list()
+    else:
+        print("Invalid mode.")
         return
 
-    print("\nSelect starting city:")
-    for idx, c in enumerate(cities):
-        print(f"{idx+1}. {c['name']}")
-    while True:
-        choice = input("Enter number: ").strip()
-        if choice.isdigit() and 1 <= int(choice) <= len(cities):
-            start_idx = int(choice) - 1
-            break
-        print("Invalid selection.")
-
+    for i, c in enumerate(cities):
+        print(f"{i+1}. {c['name']}")
+    start = input("Start from city number: ").strip()
+    start_idx = int(start) - 1 if start.isdigit() and 0 <= int(start)-1 < len(cities) else 0
     route, total = solve_tsp(cities, start_idx)
     print_route(cities, route)
-    print(f"\nEstimated Total Distance: {total:.1f} mi")
+    print(f"\nTotal distance: {total:.1f} mi")
 
-    save = input("Save results to CSV? (y/n): ").strip().lower()
-    if save == 'y':
-        records = []
-        for i in range(len(route) - 1):
-            a = cities[route[i]]
-            b = cities[route[i+1]]
-            dist = haversine(a['lat'], a['lon'], b['lat'], b['lon'])
-            records.append({
-                "City A": a['name'],
-                "City B": b['name'],
-                "Distance (mi)": round(dist, 1)
-            })
-        pd.DataFrame(records).to_csv("route_output.csv", index=False)
-        print("Saved as route_output.csv")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
