@@ -1,0 +1,145 @@
+import pandas as pd
+from geopy.geocoders import Nominatim
+from math import radians, sin, cos, sqrt, atan2
+import time
+import os
+
+geolocator = Nominatim(user_agent="offline_tsp")
+
+# ----------------- Haversine Formula ------------------
+def haversine(lat1, lon1, lat2, lon2):
+    R = 3958.8  # Earth radius in miles
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c
+
+# ----------------- City Input & Management ------------------
+def manage_city_list():
+    cities = []
+
+    if os.path.exists("city_list.csv"):
+        choice = input("1. New List\n2. Load Saved List\nChoose: ")
+    else:
+        choice = "1"
+
+    if choice == "2":
+        df = pd.read_csv("city_list.csv")
+        cities = df.to_dict('records')
+        print("Loaded saved city list.")
+
+    while True:
+        print("\nCurrent City List:")
+        for i, c in enumerate(cities):
+            print(f"{i+1}. {c['name']}")
+
+        action = input("1. Add City\n2. Remove City\n3. Continue\nChoose: ")
+
+        if action == "1":
+            name = input("Enter city (City, State): ")
+            try:
+                location = geolocator.geocode(name)
+                if not location:
+                    print("Could not find coordinates.")
+                    continue
+                city = {"name": name, "lat": location.latitude, "lon": location.longitude}
+                cities.append(city)
+                print(f"Added {name} → ({location.latitude}, {location.longitude})")
+            except Exception as e:
+                print("Error fetching coordinates:", e)
+            time.sleep(1)
+
+        elif action == "2":
+            idx = int(input("Enter city number to remove: ")) - 1
+            if 0 <= idx < len(cities):
+                removed = cities.pop(idx)
+                print(f"Removed {removed['name']}")
+            else:
+                print("Invalid index.")
+
+        elif action == "3":
+            save = input("Save this list to city_list.csv? (y/n): ")
+            if save.lower() == 'y':
+                pd.DataFrame(cities).to_csv("city_list.csv", index=False)
+                print("Saved.")
+            break
+
+    return cities
+
+# ----------------- Nearest Neighbor TSP ------------------
+def solve_tsp(cities, start_idx=0):
+    n = len(cities)
+    visited = [False] * n
+    route = [start_idx]
+    visited[start_idx] = True
+    total_distance = 0
+
+    while len(route) < n:
+        last = route[-1]
+        nearest = None
+        min_dist = float('inf')
+        for i in range(n):
+            if not visited[i]:
+                dist = haversine(cities[last]['lat'], cities[last]['lon'],
+                                 cities[i]['lat'], cities[i]['lon'])
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest = i
+        visited[nearest] = True
+        route.append(nearest)
+        total_distance += min_dist
+
+    # Optionally return to start
+    total_distance += haversine(
+        cities[route[-1]]['lat'], cities[route[-1]]['lon'],
+        cities[start_idx]['lat'], cities[start_idx]['lon']
+    )
+    route.append(start_idx)
+    return route, total_distance
+
+# ----------------- Output Table ------------------
+def print_route(cities, route):
+    print("\nOptimal Route (Nearest Neighbor Approximation):")
+    print(f"{'City A':25} | {'City B':25} | {'Distance (mi)':>14}")
+    print("-" * 70)
+    for i in range(len(route) - 1):
+        a = cities[route[i]]
+        b = cities[route[i + 1]]
+        dist = haversine(a['lat'], a['lon'], b['lat'], b['lon'])
+        print(f"{a['name'][:25]:25} | {b['name'][:25]:25} | {dist:14.1f}")
+
+# ----------------- Main ------------------
+def main():
+    print("Welcome to the Offline Route Optimizer!")
+    cities = manage_city_list()
+    if len(cities) < 2:
+        print("You need at least 2 cities.")
+        return
+
+    print("\nSelect starting city:")
+    for i, c in enumerate(cities):
+        print(f"{i+1}. {c['name']}")
+    start_idx = int(input("Enter number: ")) - 1
+
+    route, total = solve_tsp(cities, start_idx)
+    print_route(cities, route)
+    print(f"\nEstimated Total Distance: {total:.1f} mi")
+
+    save = input("Save results to CSV? (y/n): ")
+    if save.lower() == 'y':
+        records = []
+        for i in range(len(route) - 1):
+            a = cities[route[i]]
+            b = cities[route[i + 1]]
+            dist = haversine(a['lat'], a['lon'], b['lat'], b['lon'])
+            records.append({
+                "City A": a['name'],
+                "City B": b['name'],
+                "Distance (mi)": round(dist, 1)
+            })
+        pd.DataFrame(records).to_csv("route_output.csv", index=False)
+        print("Saved as route_output.csv")
+
+if __name__ == "__main__":
+    main()
