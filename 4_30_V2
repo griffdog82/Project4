@@ -35,7 +35,6 @@ Disclaimer
 - This tool uses the Nearest Neighbor heuristic, which does not guarantee the optimal route.
 - Geocoding (in Interactive mode) depends on an online service and may occasionally return inaccurate results.
 - This is meant for educational or rough planning purposes, not for real world navigation or logistics.""")
-- It doesn’t use roads or travel by car logic, there's a possiblity that you might need a ferry, an airplane or other real-world routing methods.
 
 # haversine
 def haversine(lat1, lon1, lat2, lon2):
@@ -52,15 +51,20 @@ def haversine(lat1, lon1, lat2, lon2):
 def manage_city_list():
     cities = []
 
-    if os.path.exists("city_list.csv"):
-        choice = input("1. New List\n2. Load Saved List\nChoose: ")
-    else:
-        choice = "1"
+    while True:
+        if os.path.exists("city_list.csv"):
+            choice = input("1. New List\n2. Load Saved List\nChoose: ")
+            if choice not in ["1", "2"]:
+                print("Retry")
+                continue
+        else:
+            choice = "1"
 
-    if choice == "2":
-        df = pd.read_csv("city_list.csv")
-        cities = df.to_dict('records')
-        print("Loaded saved city list.")
+        if choice == "2":
+            df = pd.read_csv("city_list.csv")
+            cities = df.to_dict('records')
+            print("Loaded saved city list.")
+        break
 
     while True:
         print("\nCurrent City List:")
