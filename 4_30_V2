@@ -3,10 +3,10 @@ from geopy.geocoders import Nominatim
 from math import radians, sin, cos, sqrt, atan2
 import time
 import os
+import glob
 
 geolocator = Nominatim(user_agent="offline_tsp")
 
-# intro
 def print_intro():
     print("""tsp_optimizer.py: Offline Route Optimizer
 Overview
@@ -34,44 +34,84 @@ Disclaimer
 - It does not find the perfect route—just a good one based on proximity.
 - This tool uses the Nearest Neighbor heuristic, which does not guarantee the optimal route.
 - Geocoding (in Interactive mode) depends on an online service and may occasionally return inaccurate results.
-- This is meant for educational or rough planning purposes, not for real world navigation or logistics.""")
+- This is meant for educational or rough planning purposes, not for real world navigation or logistics.\n""")
 
-# haversine
 def haversine(lat1, lon1, lat2, lon2):
-    R = 3958.8  # Earth radius in miles
+    R = 3958.8
     dlat = radians(lat2 - lat1)
     dlon = radians(lon2 - lon1)
     a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c
 
-# load saved list
+def clean_dataframe(df):
+    df.columns = df.columns.str.strip().str.upper()
+    return df
 
-# city management
+def unique_filename(base_name):
+    counter = 1
+    filename = f"{base_name}.csv"
+    while os.path.exists(filename):
+        filename = f"{base_name}_{counter}.csv"
+        counter += 1
+    return filename
+
+def load_saved_lists():
+    csv_files = glob.glob("*.csv")
+    if not csv_files:
+        print("No saved lists found.")
+        return None
+
+    print("\nSaved Lists Found:")
+    for i, file in enumerate(csv_files):
+        print(f"{i + 1}. {file}")
+
+    try:
+        choice = int(input("Enter number to load or 0 to cancel: "))
+        if choice == 0:
+            return None
+        selected_file = csv_files[choice - 1]
+        df = pd.read_csv(selected_file, on_bad_lines="skip", encoding="latin-1")
+        df = clean_dataframe(df)
+        print(f"Loaded: {selected_file}")
+        cities = [
+            {"name": row["NAME"], "lat": row["LAT"], "lon": row["LON"]}
+            for _, row in df.iterrows()
+            if "NAME" in row and "LAT" in row and "LON" in row
+        ]
+        return cities
+    except (ValueError, IndexError, FileNotFoundError, KeyError) as e:
+        print("Invalid selection or file error:", e)
+        return None
+
 def manage_city_list():
+    print("1. Create New List\n2. Load Saved List")
+    choice = input("Choose an option (1 or 2): ")
+
     cities = []
-
-    while True:
-        if os.path.exists("city_list.csv"):
-            choice = input("1. New List\n2. Load Saved List\nChoose: ")
-            if choice not in ["1", "2"]:
-                print("Retry")
-                continue
+    if choice == "2":
+        loaded = load_saved_lists()
+        if not loaded:
+            print("Falling back to new list mode.")
         else:
-            choice = "1"
+            cities = loaded  # ← don't lose this!
+            while True:
+                print("\nLoaded List:")
+                for i, c in enumerate(cities):
+                    print(f"{i+1}. {c['name']}")
+                action = input("\n1. Edit List\n2. Continue\nChoose: ")
+                if action == "2":
+                    return cities
+                elif action == "1":
+                    break
 
-        if choice == "2":
-            df = pd.read_csv("city_list.csv")
-            cities = df.to_dict('records')
-            print("Loaded saved city list.")
-        break
-
+    cities = []
     while True:
         print("\nCurrent City List:")
         for i, c in enumerate(cities):
             print(f"{i+1}. {c['name']}")
 
-        action = input("1. Add City\n2. Remove City\n3. Continue\nChoose: ")
+        action = input("\n1. Add City\n2. Remove City\n3. Continue\nChoose: ")
 
         if action == "1":
             name = input("Enter city (City, State): ")
@@ -96,33 +136,31 @@ def manage_city_list():
                 print("Invalid index.")
 
         elif action == "3":
-            save = input("Save this list to city_list.csv? (y/n): ")
+            save = input("Save this list? (y/n): ")
             if save.lower() == 'y':
-                pd.DataFrame(cities).to_csv("city_list.csv", index=False)
-                print("Saved.")
+                filename = unique_filename("city_list")
+                pd.DataFrame(cities).to_csv(filename, index=False)
+                print(f"Saved as {filename}")
             break
 
     return cities
 
-# solver
 def solve_tsp(cities, start_idx=0, end_idx=None):
     n = len(cities)
     visited = [False] * n
     route = [start_idx]
     visited[start_idx] = True
     if end_idx is not None:
-        visited[end_idx] = False  # don't mark end city visited yet
+        visited[end_idx] = False
 
     total_distance = 0
-
     while len(route) < n - (1 if end_idx is not None else 0):
         last = route[-1]
         nearest = None
         min_dist = float('inf')
         for i in range(n):
             if not visited[i] and i != end_idx:
-                dist = haversine(cities[last]['lat'], cities[last]['lon'],
-                                 cities[i]['lat'], cities[i]['lon'])
+                dist = haversine(cities[last]['lat'], cities[last]['lon'], cities[i]['lat'], cities[i]['lon'])
                 if dist < min_dist:
                     min_dist = dist
                     nearest = i
@@ -131,20 +169,15 @@ def solve_tsp(cities, start_idx=0, end_idx=None):
         total_distance += min_dist
 
     if end_idx is not None:
-        dist = haversine(cities[route[-1]]['lat'], cities[route[-1]]['lon'],
-                         cities[end_idx]['lat'], cities[end_idx]['lon'])
+        dist = haversine(cities[route[-1]]['lat'], cities[route[-1]]['lon'], cities[end_idx]['lat'], cities[end_idx]['lon'])
         route.append(end_idx)
         total_distance += dist
     else:
-        total_distance += haversine(
-            cities[route[-1]]['lat'], cities[route[-1]]['lon'],
-            cities[start_idx]['lat'], cities[start_idx]['lon']
-        )
+        total_distance += haversine(cities[route[-1]]['lat'], cities[route[-1]]['lon'], cities[start_idx]['lat'], cities[start_idx]['lon'])
         route.append(start_idx)
 
     return route, total_distance
 
-# ----------------- Output Table ------------------
 def print_route(cities, route):
     print("\nOptimal Route (Nearest Neighbor Approximation):")
     print(f"{'City A':25} | {'City B':25} | {'Distance (mi)':>14}")
@@ -155,10 +188,8 @@ def print_route(cities, route):
         dist = haversine(a['lat'], a['lon'], b['lat'], b['lon'])
         print(f"{a['name'][:25]:25} | {b['name'][:25]:25} | {dist:14.1f}")
 
-# main
 def main():
     print_intro()
-    print("\nWelcome to the Offline Route Optimizer!")
     cities = manage_city_list()
     if len(cities) < 2:
         print("You need at least 2 cities.")
