@@ -35,6 +35,7 @@ Disclaimer
 - This tool uses the Nearest Neighbor heuristic, which does not guarantee the optimal route.
 - Geocoding (in Interactive mode) depends on an online service and may occasionally return inaccurate results.
 - This is meant for educational or rough planning purposes, not for real world navigation or logistics.""")
+- It doesn’t use roads or travel by car logic, there's a possiblity that you might need a ferry, an airplane or other real-world routing methods.
 
 # haversine
 def haversine(lat1, lon1, lat2, lon2):
