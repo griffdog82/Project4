@@ -20,12 +20,18 @@ This is a simple tool for planning travel routes between cities in the United St
    - Distance between each step.
    - Total distance of the full loop (in miles).
 
-## Notes
+## Disclaimer
 - This program does **not** use maps or the internet (except for geocoding if you use interactive mode).
 - It does **not** find the perfect route—just a good one based on proximity.
+- This tool uses the **Nearest Neighbor heuristic**, which does **not** guarantee the optimal route.
+- Geocoding (in Interactive mode) depends on an online service and may occasionally return innacurate
+- This is meant for **educational or rough planning purposes**, not for real world navigation or logistics.
 
+
+
+**
 ## Requirements
-- Python 3
+- Python 3.13
 - Packages: `pandas`, `geopy`
 
 Run it by typing:
