@@ -1,0 +1,58 @@
+def main():
+    print_intro()
+    print("\nWelcome to the Offline Route Optimizer!")
+    cities = manage_city_list()
+    if len(cities) < 2:
+        print("You need at least 2 cities.")
+        return
+
+    # Select starting city with validation
+    while True:
+        print("\nSelect starting city:")
+        for i, c in enumerate(cities):
+            print(f"{i+1}. {c['name']}")
+        try:
+            start_idx = int(input("Enter number: ")) - 1
+            if 0 <= start_idx < len(cities):
+                break
+            else:
+                print("Invalid selection. Try again.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+    # Select ending city with validation
+    while True:
+        print("\nSelect ending city:")
+        for i, c in enumerate(cities):
+            print(f"{i+1}. {c['name']}")
+        try:
+            end_idx = int(input("Enter number: ")) - 1
+            if 0 <= end_idx < len(cities):
+                if end_idx == start_idx:
+                    print("End city must be different from start city. Try again.")
+                else:
+                    break
+            else:
+                print("Invalid selection. Try again.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+    # Solve and display route
+    route, total = solve_tsp(cities, start_idx, end_idx)
+    print_route(cities, route)
+    print(f"\nEstimated Total Distance: {total:.1f} mi")
+
+    save = input("Save results to CSV? (y/n): ")
+    if save.lower() == 'y':
+        records = []
+        for i in range(len(route) - 1):
+            a = cities[route[i]]
+            b = cities[route[i + 1]]
+            dist = haversine(a['lat'], a['lon'], b['lat'], b['lon'])
+            records.append({
+                "City A": a['name'],
+                "City B": b['name'],
+                "Distance (mi)": round(dist, 1)
+            })
+        pd.DataFrame(records).to_csv("route_output.csv", index=False)
+        print("Saved as route_output.csv")
