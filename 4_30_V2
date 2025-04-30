@@ -5,48 +5,8 @@ import time
 import os
 
 geolocator = Nominatim(user_agent="offline_tsp")
-# ----------------- Print Intro Method ----------------
-def print_intro():
-    print("""tsp_optimizer.py: Offline Route Optimizer
-Overview
-This is a simple tool for planning travel routes between cities in the United States. It uses a popular method called the Nearest Neighbor heuristic to estimate the shortest round-trip route.
 
-What it Does
-Calculates travel distance between cities using the Haversine formula, which measures distances on Earth using latitude and longitude.
-Lets you choose between:
-Interactive mode – You enter city names yourself.
-Fixed list mode – Uses a built-in list of 20 major U.S. cities.
-
-How to Use
-Run the program in a Python environment.
-Choose a mode:
-Press 1 for interactive mode (add cities manually).
-Press 2 to use all 20 preloaded cities automatically.
-Choose which city to start from.
-The tool will print:
-An ordered list of travel steps.
-Distance between each step.
-Total distance of the full loop (in miles).
-
-Disclaimer
-- This program does not use maps or the internet (except for geocoding if you use interactive mode).
-- It does not find the perfect route—just a good one based on proximity.
-- This tool uses the Nearest Neighbor heuristic, which does not guarantee the optimal route.
-- Geocoding (in Interactive mode) depends on an online service and may occasionally return innacurate
-- This is meant for educational or rough planning purposes, not for real world navigation or logistics.
-
-Requirements
-Python 3
-Packages: pandas, geopy
-
-Run it by typing:
-
-python tsp_optimizer.py
-
-Enjoy planning smarter road trips!
-""")
-
-# ----------------- Haversine Formula ------------------
+# haversine formula
 def haversine(lat1, lon1, lat2, lon2):
     R = 3958.8  # Earth radius in miles
     dlat = radians(lat2 - lat1)
@@ -55,7 +15,7 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c
 
-# ----------------- City Input & Management ------------------
+# city management
 def manage_city_list():
     cities = []
 
@@ -74,12 +34,12 @@ def manage_city_list():
         for i, c in enumerate(cities):
             print(f"{i+1}. {c['name']}")
 
-        action = input("1. Add City\n2. Remove City\n3. Continue\nChoose: ")
+        action = input("\n1. Add City\n2. Remove City\n3. Continue\nChoose: ")
 
         if action == "1":
             name = input("Enter city (City, State): ")
             try:
-                location = geolocator.geocode(name)
+                location = geolocator.geocode(name, timeout=10)
                 if not location:
                     print("Could not find coordinates.")
                     continue
@@ -107,20 +67,23 @@ def manage_city_list():
 
     return cities
 
-# ----------------- Nearest Neighbor TSP ------------------
-def solve_tsp(cities, start_idx=0):
+# tsp solver with optional end point
+def solve_tsp(cities, start_idx=0, end_idx=None):
     n = len(cities)
     visited = [False] * n
     route = [start_idx]
     visited[start_idx] = True
+    if end_idx is not None:
+        visited[end_idx] = False  # allow ending at destination
+
     total_distance = 0
 
-    while len(route) < n:
+    while len(route) < n - (1 if end_idx is not None else 0):
         last = route[-1]
         nearest = None
         min_dist = float('inf')
         for i in range(n):
-            if not visited[i]:
+            if not visited[i] and i != end_idx:
                 dist = haversine(cities[last]['lat'], cities[last]['lon'],
                                  cities[i]['lat'], cities[i]['lon'])
                 if dist < min_dist:
@@ -130,17 +93,23 @@ def solve_tsp(cities, start_idx=0):
         route.append(nearest)
         total_distance += min_dist
 
-    # Optionally return to start
-    total_distance += haversine(
-        cities[route[-1]]['lat'], cities[route[-1]]['lon'],
-        cities[start_idx]['lat'], cities[start_idx]['lon']
-    )
-    route.append(start_idx)
+    if end_idx is not None:
+        dist = haversine(cities[route[-1]]['lat'], cities[route[-1]]['lon'],
+                         cities[end_idx]['lat'], cities[end_idx]['lon'])
+        route.append(end_idx)
+        total_distance += dist
+    else:
+        total_distance += haversine(
+            cities[route[-1]]['lat'], cities[route[-1]]['lon'],
+            cities[start_idx]['lat'], cities[start_idx]['lon']
+        )
+        route.append(start_idx)
+
     return route, total_distance
 
-# ----------------- Output Table ------------------
+# print route table
 def print_route(cities, route):
-    print("\nOptimal Route (Nearest Neighbor Approximation):")
+    print("\nOptimal Route:")
     print(f"{'City A':25} | {'City B':25} | {'Distance (mi)':>14}")
     print("-" * 70)
     for i in range(len(route) - 1):
@@ -149,10 +118,9 @@ def print_route(cities, route):
         dist = haversine(a['lat'], a['lon'], b['lat'], b['lon'])
         print(f"{a['name'][:25]:25} | {b['name'][:25]:25} | {dist:14.1f}")
 
-# ----------------- Main ------------------
+# main program
 def main():
-    print_intro()
-    print("Welcome to the Offline Route Optimizer!")
+    print("Welcome to the Traveling Salesman Problem Solver!\nThis program finds the shortest round-trip or one-way path between cities you provide.")
     cities = manage_city_list()
     if len(cities) < 2:
         print("You need at least 2 cities.")
@@ -163,9 +131,18 @@ def main():
         print(f"{i+1}. {c['name']}")
     start_idx = int(input("Enter number: ")) - 1
 
-    route, total = solve_tsp(cities, start_idx)
+    print("\nSelect ending city:")
+    for i, c in enumerate(cities):
+        print(f"{i+1}. {c['name']}")
+    end_idx = int(input("Enter number: ")) - 1
+
+    if end_idx == start_idx:
+        print("End city must be different from start city for one-way route.")
+        return
+
+    route, total = solve_tsp(cities, start_idx, end_idx)
     print_route(cities, route)
-    print(f"\nEstimated Total Distance: {total:.1f} mi")
+    print(f"\nEstimated Total Distance: {total:.1f} mi\n")
 
     save = input("Save results to CSV? (y/n): ")
     if save.lower() == 'y':
@@ -179,8 +156,7 @@ def main():
                 "City B": b['name'],
                 "Distance (mi)": round(dist, 1)
             })
-        pd.DataFrame(records).to_csv("route_output.csv", index=False)
-        print("Saved as route_output.csv")
+        pd.DataFrame(records).to_csv("route.csv", index=False)
+        print("Saved as route.csv")
 
-if __name__ == "__main__":
-    main()
+main()
