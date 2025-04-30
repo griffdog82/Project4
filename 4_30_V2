@@ -5,6 +5,7 @@ import time
 import os
 
 geolocator = Nominatim(user_agent="offline_tsp")
+
 # ----------------- Print Intro Method ----------------
 def print_intro():
     print("""tsp_optimizer.py: Offline Route Optimizer
@@ -32,9 +33,16 @@ Disclaimer
 - This program does not use maps or the internet (except for geocoding if you use interactive mode).
 - It does not find the perfect route—just a good one based on proximity.
 - This tool uses the Nearest Neighbor heuristic, which does not guarantee the optimal route.
-- Geocoding (in Interactive mode) depends on an online service and may occasionally return innacurate
-- This is meant for educational or rough planning purposes, not for real world navigation or logistics.
+- Geocoding (in Interactive mode) depends on an online service and may occasionally return inaccurate results.
+- This is meant for educational or rough planning purposes, not for real world navigation or logistics.""")
 
+# ----------------- Haversine ------------------
+def haversine(lat1, lon1, lat2, lon2):
+    R = 3958.8  # Earth radius in miles
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c
 
 # ----------------- City Input & Management ------------------
@@ -61,7 +69,7 @@ def manage_city_list():
         if action == "1":
             name = input("Enter city (City, State): ")
             try:
-                location = geolocator.geocode(name)
+                location = geolocator.geocode(name, timeout=10)
                 if not location:
                     print("Could not find coordinates.")
                     continue
@@ -89,20 +97,23 @@ def manage_city_list():
 
     return cities
 
-# ----------------- Nearest Neighbor TSP ------------------
-def solve_tsp(cities, start_idx=0):
+# ----------------- Nearest Neighbor TSP with optional end ------------------
+def solve_tsp(cities, start_idx=0, end_idx=None):
     n = len(cities)
     visited = [False] * n
     route = [start_idx]
     visited[start_idx] = True
+    if end_idx is not None:
+        visited[end_idx] = False  # don't mark end city visited yet
+
     total_distance = 0
 
-    while len(route) < n:
+    while len(route) < n - (1 if end_idx is not None else 0):
         last = route[-1]
         nearest = None
         min_dist = float('inf')
         for i in range(n):
-            if not visited[i]:
+            if not visited[i] and i != end_idx:
                 dist = haversine(cities[last]['lat'], cities[last]['lon'],
                                  cities[i]['lat'], cities[i]['lon'])
                 if dist < min_dist:
@@ -112,12 +123,18 @@ def solve_tsp(cities, start_idx=0):
         route.append(nearest)
         total_distance += min_dist
 
-    # Optionally return to start
-    total_distance += haversine(
-        cities[route[-1]]['lat'], cities[route[-1]]['lon'],
-        cities[start_idx]['lat'], cities[start_idx]['lon']
-    )
-    route.append(start_idx)
+    if end_idx is not None:
+        dist = haversine(cities[route[-1]]['lat'], cities[route[-1]]['lon'],
+                         cities[end_idx]['lat'], cities[end_idx]['lon'])
+        route.append(end_idx)
+        total_distance += dist
+    else:
+        total_distance += haversine(
+            cities[route[-1]]['lat'], cities[route[-1]]['lon'],
+            cities[start_idx]['lat'], cities[start_idx]['lon']
+        )
+        route.append(start_idx)
+
     return route, total_distance
 
 # ----------------- Output Table ------------------
@@ -134,7 +151,7 @@ def print_route(cities, route):
 # ----------------- Main ------------------
 def main():
     print_intro()
-    print("Welcome to the Offline Route Optimizer!")
+    print("\nWelcome to the Offline Route Optimizer!")
     cities = manage_city_list()
     if len(cities) < 2:
         print("You need at least 2 cities.")
@@ -145,7 +162,16 @@ def main():
         print(f"{i+1}. {c['name']}")
     start_idx = int(input("Enter number: ")) - 1
 
-    route, total = solve_tsp(cities, start_idx)
+    print("\nSelect ending city:")
+    for i, c in enumerate(cities):
+        print(f"{i+1}. {c['name']}")
+    end_idx = int(input("Enter number: ")) - 1
+
+    if end_idx == start_idx:
+        print("End city must be different from start city for one-way trip.")
+        return
+
+    route, total = solve_tsp(cities, start_idx, end_idx)
     print_route(cities, route)
     print(f"\nEstimated Total Distance: {total:.1f} mi")
 
