@@ -49,53 +49,78 @@ def haversine(lat1, lon1, lat2, lon2):
 def manage_city_list():
     cities = []
 
-    if os.path.exists("city_list.csv"):
-        choice = input("1. New List\n2. Load Saved List\nChoose: ")
-    else:
-        choice = "1"
+    # List all CSV files in current directory that start with "city_list"
+    saved_lists = [f for f in os.listdir('.') if f.startswith("city_list") and f.endswith(".csv")]
 
-    if choice == "2":
-        df = pd.read_csv("city_list.csv")
-        cities = df.to_dict('records')
-        print("Loaded saved city list.")
+    print("1. Create New List")
+    if saved_lists:
+        print("2. Load Saved List")
+    choice = input("Choose: ")
 
-    while True:
-        print("\nCurrent City List:")
-        for i, c in enumerate(cities):
-            print(f"{i+1}. {c['name']}")
-
-        action = input("1. Add City\n2. Remove City\n3. Continue\nChoose: ")
-
-        if action == "1":
-            name = input("Enter city (City, State): ")
+    if choice == "2" and saved_lists:
+        print("\nSaved Lists:")
+        for i, fname in enumerate(saved_lists):
+            print(f"{i+1}. {fname}")
+        list_choice = int(input("Select List (Enter #): ")) - 1
+        if 0 <= list_choice < len(saved_lists):
+            selected_file = saved_lists[list_choice]
             try:
-                location = geolocator.geocode(name, timeout=10)
-                if not location:
-                    print("Could not find coordinates.")
-                    continue
-                city = {"name": name, "lat": location.latitude, "lon": location.longitude}
-                cities.append(city)
-                print(f"Added {name} → ({location.latitude}, {location.longitude})")
+                df = pd.read_csv(selected_file)
+                # Clean: ensure lat/lon exist
+                df = df.dropna(subset=['lat', 'lon'])
+                df = df[df['lat'].apply(lambda x: isinstance(x, (float, int))) &
+                        df['lon'].apply(lambda x: isinstance(x, (float, int)))]
+                cities = df.to_dict('records')
+                print(f"Loaded {selected_file}")
             except Exception as e:
-                print("Error fetching coordinates:", e)
-            time.sleep(1)
+                print("Failed to load list:", e)
+        else:
+            print("Invalid selection.")
+            return manage_city_list()  # Restart process
+    else:
+        while True:
+            print("\nCurrent City List:")
+            for i, c in enumerate(cities):
+                print(f"{i+1}. {c['name']}")
 
-        elif action == "2":
-            idx = int(input("Enter city number to remove: ")) - 1
-            if 0 <= idx < len(cities):
-                removed = cities.pop(idx)
-                print(f"Removed {removed['name']}")
-            else:
-                print("Invalid index.")
+            action = input("1. Add City\n2. Remove City\n3. Continue\nChoose: ")
 
-        elif action == "3":
-            save = input("Save this list to city_list.csv? (y/n): ")
-            if save.lower() == 'y':
-                pd.DataFrame(cities).to_csv("city_list.csv", index=False)
-                print("Saved.")
-            break
+            if action == "1":
+                name = input("Enter city (City, State): ")
+                try:
+                    location = geolocator.geocode(name, timeout=10)
+                    if not location:
+                        print("Could not find coordinates.")
+                        continue
+                    city = {"name": name, "lat": location.latitude, "lon": location.longitude}
+                    cities.append(city)
+                    print(f"Added {name} → ({location.latitude}, {location.longitude})")
+                except Exception as e:
+                    print("Error fetching coordinates:", e)
+                time.sleep(1)
+
+            elif action == "2":
+                idx = int(input("Enter city number to remove: ")) - 1
+                if 0 <= idx < len(cities):
+                    removed = cities.pop(idx)
+                    print(f"Removed {removed['name']}")
+                else:
+                    print("Invalid index.")
+
+            elif action == "3":
+                if len(cities) < 2:
+                    print("You need at least 2 cities to continue.")
+                    continue
+                save_name = input("Save this list as (e.g., city_list_trip.csv): ").strip()
+                if save_name:
+                    if not save_name.endswith(".csv"):
+                        save_name += ".csv"
+                    pd.DataFrame(cities).to_csv(save_name, index=False)
+                    print(f"Saved as {save_name}")
+                break
 
     return cities
+
 
 # ----------------- Nearest Neighbor TSP with optional end ------------------
 def solve_tsp(cities, start_idx=0, end_idx=None):
