@@ -6,7 +6,7 @@ import os
 
 geolocator = Nominatim(user_agent="offline_tsp")
 
-# ----------------- Print Intro Method ----------------
+# intro
 def print_intro():
     print("""tsp_optimizer.py: Offline Route Optimizer
 Overview
@@ -36,7 +36,7 @@ Disclaimer
 - Geocoding (in Interactive mode) depends on an online service and may occasionally return inaccurate results.
 - This is meant for educational or rough planning purposes, not for real world navigation or logistics.""")
 
-# ----------------- Haversine ------------------
+# haversine
 def haversine(lat1, lon1, lat2, lon2):
     R = 3958.8  # Earth radius in miles
     dlat = radians(lat2 - lat1)
@@ -45,7 +45,9 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c
 
-# ----------------- City Input & Management ------------------
+# load saved list
+
+# city management
 def manage_city_list():
     cities = []
 
@@ -97,7 +99,7 @@ def manage_city_list():
 
     return cities
 
-# ----------------- Nearest Neighbor TSP with optional end ------------------
+# solver
 def solve_tsp(cities, start_idx=0, end_idx=None):
     n = len(cities)
     visited = [False] * n
@@ -148,7 +150,7 @@ def print_route(cities, route):
         dist = haversine(a['lat'], a['lon'], b['lat'], b['lon'])
         print(f"{a['name'][:25]:25} | {b['name'][:25]:25} | {dist:14.1f}")
 
-# ----------------- Main ------------------
+# main
 def main():
     print_intro()
     print("\nWelcome to the Offline Route Optimizer!")
@@ -190,5 +192,4 @@ def main():
         pd.DataFrame(records).to_csv("route_output.csv", index=False)
         print("Saved as route_output.csv")
 
-if __name__ == "__main__":
-    main()
+main()
