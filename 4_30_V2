@@ -88,13 +88,11 @@ def manage_city_list():
     print("1. Create New List\n2. Load Saved List")
     choice = input("Choose an option (1 or 2): ")
 
-    cities = []
     if choice == "2":
-        loaded = load_saved_lists()
-        if not loaded:
+        cities = load_saved_lists()
+        if not cities:
             print("Falling back to new list mode.")
         else:
-            cities = loaded  # ← don't lose this!
             while True:
                 print("\nLoaded List:")
                 for i, c in enumerate(cities):
@@ -104,8 +102,9 @@ def manage_city_list():
                     return cities
                 elif action == "1":
                     break
+    else:
+        cities = []
 
-    cities = []
     while True:
         print("\nCurrent City List:")
         for i, c in enumerate(cities):
