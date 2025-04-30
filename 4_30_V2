@@ -194,15 +194,35 @@ def main():
         print("You need at least 2 cities.")
         return
 
-    print("\nSelect starting city:")
-    for i, c in enumerate(cities):
-        print(f"{i+1}. {c['name']}")
-    start_idx = int(input("Enter number: ")) - 1
+    while True:
+        print("\nSelect starting city:")
+        for i, c in enumerate(cities):
+            print(f"{i+1}. {c['name']}")
+        try:
+            start_idx = int(input("Enter number: ")) - 1
+            if 0 <= start_idx < len(cities):
+                break
+            else:
+                print("Invalid selection. Try again.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
 
-    print("\nSelect ending city:")
-    for i, c in enumerate(cities):
-        print(f"{i+1}. {c['name']}")
-    end_idx = int(input("Enter number: ")) - 1
+    # Select ending city with validation
+    while True:
+        print("\nSelect ending city:")
+        for i, c in enumerate(cities):
+            print(f"{i+1}. {c['name']}")
+        try:
+            end_idx = int(input("Enter number: ")) - 1
+            if 0 <= end_idx < len(cities):
+                if end_idx == start_idx:
+                    print("End city must be different from start city. Try again.")
+                else:
+                    break
+            else:
+                print("Invalid selection. Try again.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
 
     if end_idx == start_idx:
         print("End city must be different from start city for one-way trip.")
